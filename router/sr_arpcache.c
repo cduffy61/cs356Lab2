@@ -16,8 +16,60 @@
   checking whether we should resend an request or destroy the arp request.
   See the comments in the header file for an idea of what it should look like.
 */
+
+int handle_arpreq(struct sr_arpcache *cache, struct sr_arpreq *request);
 void sr_arpcache_sweepreqs(struct sr_instance *sr) { 
     /* Fill this in */
+	struct sr_arpcache *cache = sr->cache;
+	pthread_mutex_lock(&(cache->lock));
+	while(cache->requests != NULL){
+		struct sr_arpreq *request = cache->requests;
+		int ret = handle_arpreq(cache, request);
+		cache->requests = cache->requests->next;
+	}
+	       /*for each request on sr->cache.requests:
+	           handle_arpreq(request)*/
+
+	pthread_mutex_unlock(&(cache->lock));
+}
+
+int handle_arpreq(struct sr_arpcache *cache, struct sr_arpreq *request)
+{
+	/*
+	 * 1. Get Request: who has IP?
+	 * 2. If one of current router's IP is req IP, send ARP reply
+	 * function handle_arpreq(req):
+       if difftime(now, req->sent) > 1.0
+           if req->times_sent >= 5:
+               send icmp host unreachable to source addr of all pkts waiting
+                 on this request
+               arpreq_destroy(req)
+           else:
+               send arp request
+               req->sent = now
+               req->times_sent++
+	*/
+	pthread_mutex_lock(&(cache->lock));
+	time_t curtime = time(NULL);
+		int i;
+		if ((difftime(curtime,request->sent) > 1.0)) {
+			if(request->times_sent >= 5){
+				//TODO: send host unreachable to source addr for all pkts waiting on req
+				sr_arpreq_destroy(cache, request);
+			} else{
+				struct sr_arpreq *added = sr_arpcache_queuereq(cache, request->ip,request->packets,
+						request->packets->len, request->packets->iface);
+				request->sent = curtime;
+				free(request->packets);
+				request->times_sent++;
+			}
+		}
+
+
+
+	pthread_mutex_unlock(&(cache->lock));
+
+	return 0;
 }
 
 /* You should not need to touch the rest of this code. */
