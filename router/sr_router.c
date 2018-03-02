@@ -29,7 +29,6 @@
  * Initialize the routing subsystem
  *
  *---------------------------------------------------------------------*/
-
 void sr_init(struct sr_instance* sr)
 {
     /* REQUIRES */
@@ -76,9 +75,42 @@ void sr_handlepacket(struct sr_instance* sr,
   assert(packet);
   assert(interface);
 
+
+
   printf("*** -> Received packet of length %d \n",len);
 
   /* fill in code here */
+  /*
+   * 1. get the different parts of the ethernet header sr_protocol.h
+   * 2. check if destination MAC is one of our interfaces, if not, drop packet
+   * 3. check the CRC check sum if fail, drop packet
+   *
+   * if arp--if its arp req, write respnse, if reply, handle it
+   * if TTL == O, reply ICMP TTL error to sender code 8
+   */
+
+  struct sr_ethernet_hdr *eth = (struct sr_ethernet_hdr*)packet;
+  if(htonl(len) < sizeof(sr_ethernet_hdr_t)){
+	  fprintf(stderr, "Packet dropped, too small.\n");
+      return;
+  }
+     struct sr_if *our_interface = sr_get_interface(sr, interface);
+
+    /***
+     * If ethertype of packet equals ARP
+     */
+
+    /**
+     * if ethertype of packet equals IP
+     */
+
+    //else drop packet
+
 
 }/* end sr_ForwardPacket */
+
+int send_arp(struct sr_instance* sr, u_int8_t msg, uint8_t* mac_addr, uint32_t dip, struct sr_if* iface){
+    
+    return 0;
+}
 
