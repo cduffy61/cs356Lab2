@@ -17,11 +17,11 @@
   See the comments in the header file for an idea of what it should look like.
 */
 
-int handle_arpreq(struct sr_arpcache *cache, struct sr_arpreq *request);
+int handle_arpreq(struct sr_instance *sr, struct sr_arpreq *request);
 void sr_arpcache_sweepreqs(struct sr_instance *sr) { 
     /* Fill this in */
+
 	struct sr_arpcache *cache = sr->cache;
-	pthread_mutex_lock(&(cache->lock));
 	while(cache->requests != NULL){
 		struct sr_arpreq *request = cache->requests;
 		int ret = handle_arpreq(cache, request);
@@ -30,10 +30,10 @@ void sr_arpcache_sweepreqs(struct sr_instance *sr) {
 	       /*for each request on sr->cache.requests:
 	           handle_arpreq(request)*/
 
-	pthread_mutex_unlock(&(cache->lock));
+
 }
 
-int handle_arpreq(struct sr_arpcache *cache, struct sr_arpreq *request)
+int handle_arpreq(struct sr_instance *sr, struct sr_arpreq *request)
 {
 	/*
 	 * 1. Get Request: who has IP?
@@ -49,26 +49,28 @@ int handle_arpreq(struct sr_arpcache *cache, struct sr_arpreq *request)
                req->sent = now
                req->times_sent++
 	*/
-	pthread_mutex_lock(&(cache->lock));
+
 	time_t curtime = time(NULL);
 		int i;
 		if ((difftime(curtime,request->sent) > 1.0)) {
 			if(request->times_sent >= 5){
 				//TODO: send host unreachable to source addr for all pkts waiting on req
-				sr_arpreq_destroy(cache, request);
+				sr_arpreq_destroy(sr->cache, request);
 			} else{
-				struct sr_arpreq *added = sr_arpcache_queuereq(cache, request->ip,request->packets,
-						request->packets->len, request->packets->iface);
-				request->sent = curtime;
-				free(request->packets);
-				request->times_sent++;
+                //send out overall the IP addresses (interfaces)
+                struct sr_if *router_interfaces = sr->if_list;
+				while(router_interfaces != NULL){
+					uint8_t broadcast_mac [] = {0xff,0xff,0xff,0xff,0xff,0xff};
+                    //TODO: write send_arp
+                    send_arp(sr, REQUEST, broadcast_mac, request->ip, router_interfaces);
+                    request->sent = curtime;
+                    request->times_sent++;
+                    router_interfaces = router_interfaces->next;
+				}
+
 			}
+
 		}
-
-
-
-	pthread_mutex_unlock(&(cache->lock));
-
 	return 0;
 }
 
