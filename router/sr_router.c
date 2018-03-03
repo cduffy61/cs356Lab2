@@ -13,6 +13,8 @@
 
 #include <stdio.h>
 #include <assert.h>
+#include <stdlib.h>
+#include <string.h>
 
 
 #include "sr_if.h"
@@ -21,6 +23,10 @@
 #include "sr_protocol.h"
 #include "sr_arpcache.h"
 #include "sr_utils.h"
+
+#define IP_ADDR_LEN 4
+
+int init_arp(sr_arp_hdr_t* arp_hdr, uint8_t* mac_addr, struct sr_if* iface, uint8_t msg, uint32_t dip);
 
 /*---------------------------------------------------------------------
  * Method: sr_init(void)
@@ -109,8 +115,68 @@ void sr_handlepacket(struct sr_instance* sr,
 
 }/* end sr_ForwardPacket */
 
-int send_arp(struct sr_instance* sr, u_int8_t msg, uint8_t* mac_addr, uint32_t dip, struct sr_if* iface){
-    
+int init_arp(sr_arp_hdr_t* arp_hdr, uint8_t* mac_addr, struct sr_if* iface, uint8_t msg, uint32_t dip)
+{
+    arp_hdr->ar_hrd = arp_hrd_ethernet;
+    arp_hdr->ar_pro = ethertype_arp;
+    arp_hdr->ar_tip = dip;
+    arp_hdr->ar_sip = iface->ip;
+    arp_hdr->ar_hln = ETHER_ADDR_LEN;
+    arp_hdr->ar_pln = IP_ADDR_LEN ;
+
+    //put the mac addresses VALUES in the arp header
+    memcpy((void*)arp_hdr->ar_sha, iface->addr, ETHER_ADDR_LEN * sizeof(uint8_t));
+    memcpy((void*)arp_hdr->ar_tha, mac_addr, ETHER_ADDR_LEN * sizeof(uint8_t));
+
+    arp_hdr->ar_op = msg;
+
+    return 0;
+}
+/*Per IBM resource, network bytes are always big endian, convert data other than MAC and IP addrs*/
+int arp_ntwk_cnv(sr_arp_hdr_t* arp_hdr)
+{
+    arp_hdr->ar_hrd = htons(arp_hdr->ar_hrd);
+    arp_hdr->ar_op = htons(arp_hdr->ar_op);
+    arp_hdr->ar_pro = htons(arp_hdr->ar_pro);
+    return 0;
+}
+
+/**
+ * Creates ethernet frame and arp header to hold message
+ * @param sr - router instance
+ * @param msg - arp msg
+ * @param mac_addr  - dest mac
+ * @param dip - dest IP
+ * @param iface - router interface for this message
+ * @return 0 on success, 1 failure
+ */
+int send_arp(struct sr_instance* sr, uint8_t msg, uint8_t* mac_addr, uint32_t dip, struct sr_if* iface)
+{
+
+    uint8_t * packet = malloc(sizeof(sr_ethernet_hdr_t) + sizeof(sr_arp_hdr_t));
+    sr_ethernet_hdr_t* eth_hdr = (sr_ethernet_hdr_t*)packet;
+    sr_arp_hdr_t* arp_hdr = (sr_arp_hdr_t*)(packet + sizeof(sr_ethernet_hdr_t));
+
+    //put the mac addresses VALUES in the ethernet header
+    memcpy((void*)eth_hdr->ether_dhost, mac_addr, ETHER_ADDR_LEN * sizeof(uint8_t));
+    memcpy((void*)eth_hdr->ether_shost, iface->addr, ETHER_ADDR_LEN * sizeof(uint8_t));
+
+    eth_hdr->ether_type = ethertype_arp;
+    //convert for ntwk order
+    eth_hdr->ether_type = htons(eth_hdr->ether_type);
+
+
+    init_arp(arp_hdr, mac_addr, iface, msg, dip);
+
+    arp_ntwk_cnv(arp_hdr);
+
+    printf("Sending arp pckt with tip: %d\n", arp_hdr->ar_tip);
+
+    if(sr_send_packet(sr, packet, sizeof(packet), iface->name) == -1){
+        printf(stderr, "ARP packet failure.\n");
+    }
+
+
     return 0;
 }
 

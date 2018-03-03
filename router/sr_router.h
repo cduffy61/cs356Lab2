@@ -67,7 +67,7 @@ int sr_read_from_server(struct sr_instance* );
 /* -- sr_router.c -- */
 void sr_init(struct sr_instance* );
 void sr_handlepacket(struct sr_instance* , uint8_t * , unsigned int , char* );
-int send_arp(struct sr_instance* sr, u_int8_t msg, uint8_t* mac_addr, uint32_t dip, struct sr_if* iface);
+int send_arp(struct sr_instance* sr, uint8_t msg, uint8_t* mac_addr, uint32_t dip, struct sr_if* iface);
 
 /* -- sr_if.c -- */
 void sr_add_interface(struct sr_instance* , const char* );

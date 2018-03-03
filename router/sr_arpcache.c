@@ -11,6 +11,7 @@
 #include "sr_if.h"
 #include "sr_protocol.h"
 
+
 /* 
   This function gets called every second. For each request sent out, we keep
   checking whether we should resend an request or destroy the arp request.
@@ -62,7 +63,7 @@ int handle_arpreq(struct sr_instance *sr, struct sr_arpreq *request)
 				while(router_interfaces != NULL){
 					uint8_t broadcast_mac [] = {0xff,0xff,0xff,0xff,0xff,0xff};
                     //TODO: write send_arp
-                    send_arp(sr, REQUEST, broadcast_mac, request->ip, router_interfaces);
+                    int success = send_arp(sr, arp_op_request, broadcast_mac, request->ip, router_interfaces);
                     request->sent = curtime;
                     request->times_sent++;
                     router_interfaces = router_interfaces->next;
