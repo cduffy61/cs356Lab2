@@ -27,6 +27,9 @@
 #define IP_ADDR_LEN 4
 
 int init_arp(sr_arp_hdr_t* arp_hdr, uint8_t* mac_addr, struct sr_if* iface, uint8_t msg, uint32_t dip);
+int arp_hst_cnv(sr_arp_hdr_t* arp_hdr);
+int send_arp_reply(struct sr_instance* sr, sr_arp_hdr_t* arp_req, struct sr_if* iface);
+int sr_handle_arp(struct sr_instance* sr, sr_arp_hdr_t* arp_hdr, struct sr_if* iface);
 
 /*---------------------------------------------------------------------
  * Method: sr_init(void)
@@ -110,10 +113,21 @@ void sr_handlepacket(struct sr_instance* sr,
      * if ethertype of packet equals IP
      */
 
-    //else drop packet
+    /* else drop packet */
 
 
 }/* end sr_ForwardPacket */
+
+/*
+ *Handles ARP packets from sr_handle packet. Assumes: Sanity check.
+ * ARP Requests: If MAC matches us, call send_arp_reply
+ * ARP Reply: Add MAC to arp cache, send all packets in queue waiting on this request.
+ * Return 0 on success, 1 on failure
+ */
+int sr_handle_arp(struct sr_instance* sr, sr_arp_hdr_t* arp_hdr, struct sr_if* iface)
+{
+    return 0;
+}
 
 int init_arp(sr_arp_hdr_t* arp_hdr, uint8_t* mac_addr, struct sr_if* iface, uint8_t msg, uint32_t dip)
 {
@@ -124,7 +138,7 @@ int init_arp(sr_arp_hdr_t* arp_hdr, uint8_t* mac_addr, struct sr_if* iface, uint
     arp_hdr->ar_hln = ETHER_ADDR_LEN;
     arp_hdr->ar_pln = IP_ADDR_LEN ;
 
-    //put the mac addresses VALUES in the arp header
+    /* put the mac addresses VALUES in the arp header */
     memcpy((void*)arp_hdr->ar_sha, iface->addr, ETHER_ADDR_LEN * sizeof(uint8_t));
     memcpy((void*)arp_hdr->ar_tha, mac_addr, ETHER_ADDR_LEN * sizeof(uint8_t));
 
@@ -138,6 +152,15 @@ int arp_ntwk_cnv(sr_arp_hdr_t* arp_hdr)
     arp_hdr->ar_hrd = htons(arp_hdr->ar_hrd);
     arp_hdr->ar_op = htons(arp_hdr->ar_op);
     arp_hdr->ar_pro = htons(arp_hdr->ar_pro);
+    return 0;
+}
+
+/* Convert network ARP header byte order to host byte order*/
+int arp_hst_cnv(sr_arp_hdr_t* arp_hdr)
+{
+    arp_hdr->ar_hrd = ntohs(arp_hdr->ar_hrd);
+    arp_hdr->ar_op = ntohs(arp_hdr->ar_op);
+    arp_hdr->ar_pro = ntohs(arp_hdr->ar_pro);
     return 0;
 }
 
@@ -157,12 +180,13 @@ int send_arp(struct sr_instance* sr, uint8_t msg, uint8_t* mac_addr, uint32_t di
     sr_ethernet_hdr_t* eth_hdr = (sr_ethernet_hdr_t*)packet;
     sr_arp_hdr_t* arp_hdr = (sr_arp_hdr_t*)(packet + sizeof(sr_ethernet_hdr_t));
 
-    //put the mac addresses VALUES in the ethernet header
+    /* put the mac addresses VALUES in the ethernet header */
     memcpy((void*)eth_hdr->ether_dhost, mac_addr, ETHER_ADDR_LEN * sizeof(uint8_t));
     memcpy((void*)eth_hdr->ether_shost, iface->addr, ETHER_ADDR_LEN * sizeof(uint8_t));
 
+    /* TODO: check if this is ethertype_ip */
     eth_hdr->ether_type = ethertype_arp;
-    //convert for ntwk order
+    /* convert for ntwk order */
     eth_hdr->ether_type = htons(eth_hdr->ether_type);
 
 
@@ -170,13 +194,22 @@ int send_arp(struct sr_instance* sr, uint8_t msg, uint8_t* mac_addr, uint32_t di
 
     arp_ntwk_cnv(arp_hdr);
 
-    printf("Sending arp pckt with tip: %d\n", arp_hdr->ar_tip);
+    printf("Sending arp pckt \n");
+    print_hdrs(packet, sizeof(packet));
 
     if(sr_send_packet(sr, packet, sizeof(packet), iface->name) == -1){
-        printf(stderr, "ARP packet failure.\n");
+        fprintf(stderr, "ARP packet failure.\n");
     }
 
+    free(packet);
 
+    return 0;
+}
+
+/*Called when incoming packet is an arp request for router's interface*/
+int send_arp_reply(struct sr_instance* sr, sr_arp_hdr_t* arp_req, struct sr_if* iface)
+{
+    send_arp(sr, arp_op_reply, arp_req->ar_tha, arp_req->ar_tip, iface);
     return 0;
 }
 

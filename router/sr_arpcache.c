@@ -6,6 +6,7 @@
 #include <pthread.h>
 #include <sched.h>
 #include <string.h>
+#include <assert.h>
 #include "sr_arpcache.h"
 #include "sr_router.h"
 #include "sr_if.h"
@@ -23,9 +24,10 @@ void sr_arpcache_sweepreqs(struct sr_instance *sr) {
     /* Fill this in */
 
 	struct sr_arpcache *cache = sr->cache;
+    assert(cache);
 	while(cache->requests != NULL){
 		struct sr_arpreq *request = cache->requests;
-		int ret = handle_arpreq(cache, request);
+		int ret = handle_arpreq(sr, request);
 		cache->requests = cache->requests->next;
 	}
 	       /*for each request on sr->cache.requests:
@@ -55,14 +57,13 @@ int handle_arpreq(struct sr_instance *sr, struct sr_arpreq *request)
 		int i;
 		if ((difftime(curtime,request->sent) > 1.0)) {
 			if(request->times_sent >= 5){
-				//TODO: send host unreachable to source addr for all pkts waiting on req
+				/* TODO: send host unreachable to source addr for all pkts waiting on req */
 				sr_arpreq_destroy(sr->cache, request);
 			} else{
-                //send out overall the IP addresses (interfaces)
+                /* send out overall the IP addresses (interfaces) */
                 struct sr_if *router_interfaces = sr->if_list;
 				while(router_interfaces != NULL){
 					uint8_t broadcast_mac [] = {0xff,0xff,0xff,0xff,0xff,0xff};
-                    //TODO: write send_arp
                     int success = send_arp(sr, arp_op_request, broadcast_mac, request->ip, router_interfaces);
                     request->sent = curtime;
                     request->times_sent++;
