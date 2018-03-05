@@ -107,43 +107,32 @@ void sr_handlepacket(struct sr_instance* sr,
   }
      struct sr_if *our_interface = sr_get_interface(sr, interface);
 
+    if (ethertype(packet) == ethertype_arp) {
+        printf("Arp type\n");
+        sr_arp_hdr_t * arphdr = (sr_arp_hdr_t *) (packet + sizeof(sr_ethernet_hdr_t));
 
-  if (ethertype(packet) == ethertype_arp) {
+        // Sanity check: meets length
+        if (sizeof(*arphdr) < (len - sizeof(sr_ethernet_hdr_t))) {
+            printf("Error in size\n");
+            return;
+        }
 
-    printf("Arp type\n");
+        if(sr_handle_arp(sr, arphdr, our_interface)){
+            printf("ARP packet handling failure.\n");
+        }
 
-    sr_arp_hdr_t * arphdr = (sr_arp_hdr_t *) (packet + sizeof(sr_ethernet_hdr_t));
 
-    // Sanity check: meets length
-    if (sizeof(arphdr) < sizeof(sr_arp_hdr_t)) {
-        printf("Error in size\n");
-        return;
     }
 
-    // Case 1: Request
-    if (arphdr->ar_op == arp_op_request) {
+     if (ethertype(packet) == ethertype_ip) {
 
-      // TODO: double check if mac_addr = arphdr->ar_sha or ar_tha
-      uint8_t* mac_addr_sender = (uint8_t*) arphdr->ar_sha;
-      send_arp(sr, arp_op_request, mac_addr_sender, arphdr->ar_sip, our_interface);
-    
-    }
 
-    // Case 2: Reply
-    else if (arphdr->ar_op == arp_op_reply) {
-        send_arp_reply(sr, arphdr, our_interface);
     }
 
   }
 
-  else if (ethertype(packet) == ethertype_ip) {
 
 
-
-  }
-
-
-}
 
 /*
  *Handles ARP packets from sr_handle packet. Assumes: Sanity check.
@@ -153,6 +142,27 @@ void sr_handlepacket(struct sr_instance* sr,
  */
 int sr_handle_arp(struct sr_instance* sr, sr_arp_hdr_t* arp_hdr, struct sr_if* iface)
 {
+    /*Convert to host byte order*/
+    arp_hst_cnv(arp_hdr);
+    /* Case 1: Request */
+    if (arp_hdr->ar_op == arp_op_request) {
+        // TODO: double check if mac_addr = arphdr->ar_sha or ar_tha
+        if(sr_arpcache_lookup(sr->cache, arp_hdr->ar_tip)){
+            /*This means we have this IP in our ARP cache, will get an arp_entry*/
+            /*Make sure the entry is valid, then send ARP reply.  Add arp_req info to the cache and send any waiting packets*/
+            uint8_t *mac_addr_new_target = (uint8_t *) arp_hdr->ar_sha;
+            send_arp(sr, arp_op_reply, mac_addr_new_target, arp_hdr->ar_sip, iface);
+        }
+
+    }
+
+        /* Case 2: Reply */
+    else if (arp_hdr->ar_op == arp_op_reply) {
+        /*insert info into the cache sr_arp_cache_insert*/
+        /*iterate through all the sr_arpreq's waiting on this MAC.  if waiting IP = sender IP, send ARP packets*/
+        send_arp_reply(sr, arp_hdr, iface);
+    }
+
     return 0;
 }
 
@@ -210,8 +220,7 @@ int send_arp(struct sr_instance* sr, uint8_t msg, uint8_t* mac_addr, uint32_t di
     /* put the mac addresses VALUES in the ethernet header */
     memcpy((void*)eth_hdr->ether_dhost, mac_addr, ETHER_ADDR_LEN * sizeof(uint8_t));
     memcpy((void*)eth_hdr->ether_shost, iface->addr, ETHER_ADDR_LEN * sizeof(uint8_t));
-
-    /* TODO: check if this is ethertype_ip */
+    
     eth_hdr->ether_type = ethertype_arp;
     /* convert for ntwk order */
     eth_hdr->ether_type = htons(eth_hdr->ether_type);
@@ -236,7 +245,7 @@ int send_arp(struct sr_instance* sr, uint8_t msg, uint8_t* mac_addr, uint32_t di
 /*Called when incoming packet is an arp request for router's interface*/
 int send_arp_reply(struct sr_instance* sr, sr_arp_hdr_t* arp_req, struct sr_if* iface)
 {
-    send_arp(sr, arp_op_reply, arp_req->ar_tha, arp_req->ar_tip, iface);
+    send_arp(sr, arp_op_reply, arp_req->ar_sha, arp_req->ar_sip, iface);
     return 0;
 }
 
