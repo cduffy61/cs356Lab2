@@ -98,6 +98,8 @@ void sr_handlepacket(struct sr_instance* sr,
    * if TTL == O, reply ICMP TTL error to sender code 8
    */
 
+  // TODO: check TTl for IP stuff
+
   struct sr_ethernet_hdr *eth = (struct sr_ethernet_hdr*)packet;
   if(htonl(len) < sizeof(sr_ethernet_hdr_t)){
 	  fprintf(stderr, "Packet dropped, too small.\n");
@@ -105,18 +107,43 @@ void sr_handlepacket(struct sr_instance* sr,
   }
      struct sr_if *our_interface = sr_get_interface(sr, interface);
 
-    /***
-     * If ethertype of packet equals ARP
-     */
 
-    /**
-     * if ethertype of packet equals IP
-     */
+  if (ethertype(packet) == ethertype_arp) {
 
-    /* else drop packet */
+    printf("Arp type\n");
+
+    sr_arp_hdr_t * arphdr = (sr_arp_hdr_t *) (packet + sizeof(sr_ethernet_hdr_t));
+
+    // Sanity check: meets length
+    if (sizeof(arphdr) < sizeof(sr_arp_hdr_t)) {
+        printf("Error in size\n");
+        return;
+    }
+
+    // Case 1: Request
+    if (arphdr->ar_op == arp_op_request) {
+
+      // TODO: double check if mac_addr = arphdr->ar_sha or ar_tha
+      uint8_t* mac_addr_sender = (uint8_t*) arphdr->ar_sha;
+      send_arp(sr, arp_op_request, mac_addr_sender, arphdr->ar_sip, our_interface);
+    
+    }
+
+    // Case 2: Reply
+    else if (arphdr->ar_op == arp_op_reply) {
+        send_arp_reply(sr, arphdr, our_interface);
+    }
+
+  }
+
+  else if (ethertype(packet) == ethertype_ip) {
 
 
-}/* end sr_ForwardPacket */
+
+  }
+
+
+}
 
 /*
  *Handles ARP packets from sr_handle packet. Assumes: Sanity check.
