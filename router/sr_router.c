@@ -406,7 +406,7 @@ int send_arp(struct sr_instance* sr, uint8_t msg, uint8_t* mac_addr, uint32_t di
 {
 
     uint8_t * packet = malloc(sizeof(sr_ethernet_hdr_t) + sizeof(sr_arp_hdr_t));
-    unsigned int len = (unsigned int) (sizeof(sr_ethernet_hdr_t) + sizeof(sr_arp_hdr_t));
+    int len = (int) (sizeof(sr_ethernet_hdr_t) + sizeof(sr_arp_hdr_t));
     sr_ethernet_hdr_t* eth_hdr = (sr_ethernet_hdr_t*)packet;
     sr_arp_hdr_t* arp_hdr = (sr_arp_hdr_t*)(packet + sizeof( sr_ethernet_hdr_t));
 
@@ -432,7 +432,7 @@ int send_arp(struct sr_instance* sr, uint8_t msg, uint8_t* mac_addr, uint32_t di
     printf("sr packet arp pckt success: %d \n", success);
     /*reverse the byte order for packet length*/
     free(packet);
-
+    printf("do we make it here\n");
     return 0;
 }
 
