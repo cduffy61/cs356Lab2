@@ -30,6 +30,7 @@ int init_arp(sr_arp_hdr_t* arp_hdr, uint8_t* mac_addr, struct sr_if* iface, uint
 int arp_hst_cnv(sr_arp_hdr_t* arp_hdr);
 int send_arp_reply(struct sr_instance* sr, sr_arp_hdr_t* arp_req, struct sr_if* iface);
 int sr_handle_arp(struct sr_instance* sr, sr_arp_hdr_t* arp_hdr, struct sr_if* iface);
+int process_arp_queue(struct sr_instance* sr, sr_arp_hdr_t* arp_hdr, struct sr_arpreq* req_q);
 
 /*---------------------------------------------------------------------
  * Method: sr_init(void)
@@ -98,7 +99,7 @@ void sr_handlepacket(struct sr_instance* sr,
    * if TTL == O, reply ICMP TTL error to sender code 8
    */
 
-  // TODO: check TTl for IP stuff
+
 
   struct sr_ethernet_hdr *eth = (struct sr_ethernet_hdr*)packet;
   if(htonl(len) < sizeof(sr_ethernet_hdr_t)){
@@ -111,7 +112,7 @@ void sr_handlepacket(struct sr_instance* sr,
         printf("Arp type\n");
         sr_arp_hdr_t * arphdr = (sr_arp_hdr_t *) (packet + sizeof(sr_ethernet_hdr_t));
 
-        // Sanity check: meets length
+        /* Sanity check: meets length */
         if (sizeof(*arphdr) < (len - sizeof(sr_ethernet_hdr_t))) {
             printf("Error in size\n");
             return;
@@ -146,41 +147,26 @@ int sr_handle_arp(struct sr_instance* sr, sr_arp_hdr_t* arp_hdr, struct sr_if* i
     /*Convert to host byte order*/
     arp_hst_cnv(arp_hdr);
 
-    struct sr_arpentry* entry_check;
-    /*Check if the sender_ip is in our ARP cache*/
-    entry_check = sr_arpcache_lookup(sr->cache, arp_hdr->ar_sip);
-    /*If not, add to ARP cache*/
+    /*Check if the sender_ip is in our ARP cache, if it is, update hardware address with sender info*/
+    /*If not in cache, and target IP is us, add to ARP cache*/
     struct sr_arpreq * req_q;
-    if(!entry_check){
-        req_q = sr_arpcache_insert(sr->cache, arp_hdr->ar_sha, arp_hdr->ar_sip);
-    }
+    req_q = sr_arpcache_insert(sr->cache, arp_hdr->ar_sha, arp_hdr->ar_sip);
+    /*If there are any packets waiting on this ARP, req_q hold them.  If none, req_q will be null*/
+
 
 
     /* Case 1: Request */
+    /*Send back a reply*/
     if (arp_hdr->ar_op == arp_op_request) {
-        struct sr_arpentry* arp_entry;
-        arp_entry = sr_arpcache_lookup(sr->cache, arp_hdr->ar_tip);
-        if(arp_entry){
-            /*This means we have this IP in our ARP cache, will get an arp_entry*/
-            /*Make sure the entry is valid, then send ARP reply.  Add arp_req info to the cache and send any waiting packets*/
-            uint8_t *mac_addr_new_target = (uint8_t *) arp_hdr->ar_sha;
-            send_arp(sr, arp_op_reply, mac_addr_new_target, arp_hdr->ar_sip, iface);
-        }
+        printf("ARP request received.\n");
+        send_arp_reply(sr, arp_hdr, iface);
 
     }
-
         /* Case 2: Reply */
-    else if (arp_hdr->ar_op == arp_op_reply) {
-        /*insert info into the cache sr_arp_cache_insert*/
-        /*iterate through all the sr_arpreq's waiting on this MAC.  if waiting IP = sender IP, send ARP packets*/
-        printf("ARP Reply received.\n");
-
-        while(req_q != NULL){
-            if(req_q->ip == arp_hdr->ar_sip){
-
-            }
-        }
-        send_arp_reply(sr, arp_hdr, iface);
+        /*iterate through all the sr_arpreq's waiting on this MAC, if no requests (req_q == NULL) drop packet*/
+    else if (arp_hdr->ar_op == arp_op_reply && req_q) {
+        printf("ARP reply received.\n");
+        process_arp_queue(sr, arp_hdr, req_q);
     }
 
     return 0;
@@ -266,6 +252,22 @@ int send_arp(struct sr_instance* sr, uint8_t msg, uint8_t* mac_addr, uint32_t di
 int send_arp_reply(struct sr_instance* sr, sr_arp_hdr_t* arp_req, struct sr_if* iface)
 {
     send_arp(sr, arp_op_reply, arp_req->ar_sha, arp_req->ar_sip, iface);
+    return 0;
+}
+
+/*sends packets waiting on ARP request in the cache queue.  deletes data in request queue once packets are sent*/
+int process_arp_queue(struct sr_instance* sr, sr_arp_hdr_t* arp_hdr, struct sr_arpreq* req_q)
+{
+    assert(req_q);
+    while(req_q->packets != NULL){
+        struct sr_packet* packet = req_q->packets;
+        sr_ethernet_hdr_t* ethernet_hdr = (sr_ethernet_hdr_t*)packet->buf;
+        memcpy(ethernet_hdr->ether_dhost, arp_hdr->ar_sha, ETHER_ADDR_LEN * sizeof(uint8_t));
+        sr_send_packet(sr, (uint8_t *)packet, packet->len, packet->iface);
+        req_q->packets = req_q->packets->next;
+    }
+
+    sr_arpreq_destroy(sr->cache, req_q);
     return 0;
 }
 
