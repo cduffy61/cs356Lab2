@@ -22,16 +22,15 @@
 int handle_arpreq(struct sr_instance *sr, struct sr_arpreq *request);
 void sr_arpcache_sweepreqs(struct sr_instance *sr) { 
     /* Fill this in */
-
-	struct sr_arpcache *cache = sr->cache;
+   /* printf("sweepreqs \n"); */
+	struct sr_arpcache *cache = &(sr->cache);
     assert(cache);
 	while(cache->requests != NULL){
 		struct sr_arpreq *request = cache->requests;
 		int ret = handle_arpreq(sr, request);
 		cache->requests = cache->requests->next;
 	}
-	       /*for each request on sr->cache.requests:
-	           handle_arpreq(request)*/
+
 
 
 }
@@ -259,11 +258,14 @@ int sr_arpcache_init(struct sr_arpcache *cache) {
     /* Invalidate all entries */
     memset(cache->entries, 0, sizeof(cache->entries));
     cache->requests = NULL;
-    
+
     /* Acquire mutex lock */
     pthread_mutexattr_init(&(cache->attr));
     pthread_mutexattr_settype(&(cache->attr), PTHREAD_MUTEX_RECURSIVE);
+
     int success = pthread_mutex_init(&(cache->lock), &(cache->attr));
+
+    printf("sr_arpcache_init success: %d \n.", success);
     
     return success;
 }
