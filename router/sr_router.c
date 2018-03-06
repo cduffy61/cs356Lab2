@@ -139,15 +139,28 @@ void sr_handlepacket(struct sr_instance* sr,
  * ARP Requests: If MAC matches us, call send_arp_reply
  * ARP Reply: Add MAC to arp cache, send all packets in queue waiting on this request.
  * Return 0 on success, 1 on failure
+ * referred to: https://tools.ietf.org/html/rfc826
  */
 int sr_handle_arp(struct sr_instance* sr, sr_arp_hdr_t* arp_hdr, struct sr_if* iface)
 {
     /*Convert to host byte order*/
     arp_hst_cnv(arp_hdr);
+
+    struct sr_arpentry* entry_check;
+    /*Check if the sender_ip is in our ARP cache*/
+    entry_check = sr_arpcache_lookup(sr->cache, arp_hdr->ar_sip);
+    /*If not, add to ARP cache*/
+    struct sr_arpreq * req_q;
+    if(!entry_check){
+        req_q = sr_arpcache_insert(sr->cache, arp_hdr->ar_sha, arp_hdr->ar_sip);
+    }
+
+
     /* Case 1: Request */
     if (arp_hdr->ar_op == arp_op_request) {
-        // TODO: double check if mac_addr = arphdr->ar_sha or ar_tha
-        if(sr_arpcache_lookup(sr->cache, arp_hdr->ar_tip)){
+        struct sr_arpentry* arp_entry;
+        arp_entry = sr_arpcache_lookup(sr->cache, arp_hdr->ar_tip);
+        if(arp_entry){
             /*This means we have this IP in our ARP cache, will get an arp_entry*/
             /*Make sure the entry is valid, then send ARP reply.  Add arp_req info to the cache and send any waiting packets*/
             uint8_t *mac_addr_new_target = (uint8_t *) arp_hdr->ar_sha;
@@ -160,6 +173,13 @@ int sr_handle_arp(struct sr_instance* sr, sr_arp_hdr_t* arp_hdr, struct sr_if* i
     else if (arp_hdr->ar_op == arp_op_reply) {
         /*insert info into the cache sr_arp_cache_insert*/
         /*iterate through all the sr_arpreq's waiting on this MAC.  if waiting IP = sender IP, send ARP packets*/
+        printf("ARP Reply received.\n");
+
+        while(req_q != NULL){
+            if(req_q->ip == arp_hdr->ar_sip){
+
+            }
+        }
         send_arp_reply(sr, arp_hdr, iface);
     }
 
