@@ -22,9 +22,11 @@
 int handle_arpreq(struct sr_instance *sr, struct sr_arpreq *request);
 void sr_arpcache_sweepreqs(struct sr_instance *sr) { 
     /* Fill this in */
-   /* printf("sweepreqs \n"); */
+   /*printf("sweepreqs \n"); */
 	struct sr_arpcache *cache = &(sr->cache);
+
     assert(cache);
+
 	while(cache->requests != NULL){
 		struct sr_arpreq *request = cache->requests;
 		int ret = handle_arpreq(sr, request);
@@ -159,6 +161,8 @@ struct sr_arpreq *sr_arpcache_insert(struct sr_arpcache *cache,
                                      uint32_t ip)
 {
     pthread_mutex_lock(&(cache->lock));
+
+    printf("make it past lock in arpcache insert \n");
     
     struct sr_arpreq *req, *prev = NULL, *next = NULL; 
     for (req = cache->requests; req != NULL; req = req->next) {

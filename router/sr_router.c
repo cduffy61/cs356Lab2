@@ -45,7 +45,9 @@ void sr_init(struct sr_instance* sr)
     assert(sr);
 
     /* Initialize cache and cache cleanup thread */
+
     sr_arpcache_init(&(sr->cache));
+
 
     pthread_attr_init(&(sr->attr));
     pthread_attr_setdetachstate(&(sr->attr), PTHREAD_CREATE_JOINABLE);
@@ -110,7 +112,9 @@ void sr_handlepacket(struct sr_instance* sr,
 
     if (ethertype(packet) == ethertype_arp) {
         printf("Arp type\n");
-        sr_arp_hdr_t * arphdr = (sr_arp_hdr_t *) (packet + sizeof(sr_ethernet_hdr_t));
+        void* arp_offset = packet + sizeof(sr_ethernet_hdr_t);
+        sr_arp_hdr_t * arphdr = (sr_arp_hdr_t *) (arp_offset);
+
 
         /* Sanity check: meets length */
         if (sizeof(*arphdr) < (len - sizeof(sr_ethernet_hdr_t))) {
@@ -145,12 +149,14 @@ void sr_handlepacket(struct sr_instance* sr,
 int sr_handle_arp(struct sr_instance* sr, sr_arp_hdr_t* arp_hdr, struct sr_if* iface)
 {
     /*Convert to host byte order*/
+    printf(" properly enter handle arp\n");
     arp_hst_cnv(arp_hdr);
 
     /*Check if the sender_ip is in our ARP cache, if it is, update hardware address with sender info*/
     /*If not in cache, and target IP is us, add to ARP cache*/
     struct sr_arpreq * req_q;
-    req_q = sr_arpcache_insert(sr->cache, arp_hdr->ar_sha, arp_hdr->ar_sip);
+    req_q = sr_arpcache_insert(&(sr->cache), arp_hdr->ar_sha, arp_hdr->ar_sip);
+    printf(" properly call cache insert\n");
     /*If there are any packets waiting on this ARP, req_q hold them.  If none, req_q will be null*/
 
 
@@ -204,6 +210,7 @@ int arp_hst_cnv(sr_arp_hdr_t* arp_hdr)
     arp_hdr->ar_hrd = ntohs(arp_hdr->ar_hrd);
     arp_hdr->ar_op = ntohs(arp_hdr->ar_op);
     arp_hdr->ar_pro = ntohs(arp_hdr->ar_pro);
+    printf(" properly exit hst_cnv\n");
     return 0;
 }
 
@@ -220,8 +227,9 @@ int send_arp(struct sr_instance* sr, uint8_t msg, uint8_t* mac_addr, uint32_t di
 {
 
     uint8_t * packet = malloc(sizeof(sr_ethernet_hdr_t) + sizeof(sr_arp_hdr_t));
+    unsigned int len = (unsigned int) (sizeof(sr_ethernet_hdr_t) + sizeof(sr_arp_hdr_t));
     sr_ethernet_hdr_t* eth_hdr = (sr_ethernet_hdr_t*)packet;
-    sr_arp_hdr_t* arp_hdr = (sr_arp_hdr_t*)(packet + sizeof(sr_ethernet_hdr_t));
+    sr_arp_hdr_t* arp_hdr = (sr_arp_hdr_t*)(packet + sizeof( sr_ethernet_hdr_t));
 
     /* put the mac addresses VALUES in the ethernet header */
     memcpy((void*)eth_hdr->ether_dhost, mac_addr, ETHER_ADDR_LEN * sizeof(uint8_t));
@@ -237,12 +245,13 @@ int send_arp(struct sr_instance* sr, uint8_t msg, uint8_t* mac_addr, uint32_t di
     arp_ntwk_cnv(arp_hdr);
 
     printf("Sending arp pckt \n");
-    print_hdrs(packet, sizeof(packet));
-
-    if(sr_send_packet(sr, packet, sizeof(packet), iface->name) == -1){
+    print_hdrs(packet, len);
+    int success = sr_send_packet(sr, packet, len, iface->name);
+    if(success == -1){
         fprintf(stderr, "ARP packet failure.\n");
     }
-
+    printf("sr packet arp pckt success: %d \n", success);
+    /*reverse the byte order for packet length*/
     free(packet);
 
     return 0;
