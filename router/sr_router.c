@@ -228,7 +228,7 @@ void handle_ip_packet(struct sr_instance* sr,
 		if(!next_hop_mac) {
 			fprintf(stderr, "ARP Cache entry not found.");
 			struct sr_arpreq *queued_arp_req = sr_arpcache_queuereq(&(sr->cache), next_hop->gw.s_addr, packet, len, next_hop->interface);
-			handle_arpreq(sr, queued_arp_req);
+			/*TODO: handle_arpreq(sr, queued_arp_req);*/
 			return;
 		}
 
@@ -360,7 +360,7 @@ int sr_handle_arp(struct sr_instance* sr, sr_arp_hdr_t* arp_hdr, struct sr_if* i
 int init_arp(sr_arp_hdr_t* arp_hdr, uint8_t* mac_addr, struct sr_if* iface, uint8_t msg, uint32_t dip)
 {
     arp_hdr->ar_hrd = arp_hrd_ethernet;
-    arp_hdr->ar_pro = ethertype_arp;
+    arp_hdr->ar_pro = ethertype_ip;
     arp_hdr->ar_tip = dip;
     arp_hdr->ar_sip = iface->ip;
     arp_hdr->ar_hln = ETHER_ADDR_LEN;
@@ -389,7 +389,6 @@ int arp_hst_cnv(sr_arp_hdr_t* arp_hdr)
     arp_hdr->ar_hrd = ntohs(arp_hdr->ar_hrd);
     arp_hdr->ar_op = ntohs(arp_hdr->ar_op);
     arp_hdr->ar_pro = ntohs(arp_hdr->ar_pro);
-    printf(" properly exit hst_cnv\n");
     return 0;
 }
 
@@ -406,7 +405,7 @@ int send_arp(struct sr_instance* sr, uint8_t msg, uint8_t* mac_addr, uint32_t di
 {
 
     uint8_t * packet = malloc(sizeof(sr_ethernet_hdr_t) + sizeof(sr_arp_hdr_t));
-    int len = (int) (sizeof(sr_ethernet_hdr_t) + sizeof(sr_arp_hdr_t));
+    uint32_t len = (uint32_t) (sizeof(sr_ethernet_hdr_t) + sizeof(sr_arp_hdr_t));
     sr_ethernet_hdr_t* eth_hdr = (sr_ethernet_hdr_t*)packet;
     sr_arp_hdr_t* arp_hdr = (sr_arp_hdr_t*)(packet + sizeof( sr_ethernet_hdr_t));
 
@@ -429,10 +428,9 @@ int send_arp(struct sr_instance* sr, uint8_t msg, uint8_t* mac_addr, uint32_t di
     if(success == -1){
         fprintf(stderr, "ARP packet failure.\n");
     }
-    printf("sr packet arp pckt success: %d \n", success);
+
     /*reverse the byte order for packet length*/
     free(packet);
-    printf("do we make it here\n");
     return 0;
 }
 
